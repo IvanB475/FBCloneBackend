@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
+const { RateLimiterMongo } = require('rate-limiter-flexible');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -29,6 +30,28 @@ db.on("error", console.error.bind(console, "connection error:"));
 db.once("open", () => {
   console.log("connected to DB");
 });
+
+const opts = {
+    storeClient: db,
+    points: 10,
+    duration: 1
+};
+
+const rateLimiterMongo = new RateLimiterMongo(opts);
+
+const rateLimiterMiddleware = (req, res, next) => { 
+    rateLimiterMongo.consume(req.ip, 2) 
+      .then((rateLimiterRes) => {
+        console.log(rateLimiterRes);
+        next();
+      })
+      .catch((rateLimiterRes) => {
+          console.log("rateLimiter: " + rateLimiterRes);
+        res.status(429).send('Too many requests');
+      });
+    };
+
+app.use(rateLimiterMiddleware);
 
 app.listen(PORT, () => {
     console.log("App started on port " + PORT);
